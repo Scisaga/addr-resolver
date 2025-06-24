@@ -1,0 +1,13 @@
+services:
+  addr-resolver:
+    image: scisaga/addr-resolver:latest # 或你构建的本地镜像名
+    container_name: addr-resolver
+    ports:
+      - "5000:5000" # 映射到本地端口
+    environment:
+      - AMAP_KEY=${AMAP_KEY} # 高德Key
+      - LLM_API_KEY=${LLM_API_KEY} # 阿里云百炼Key
+      - QWEN_MODEL=${QWEN_MODEL} # 默认是 qwen3-32b 也可以试试别的
+    volumes:
+      - ./logs:/app/logs # 映射日志目录（可选）
+    restart: unless-stopped

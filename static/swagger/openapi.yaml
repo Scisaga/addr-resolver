@@ -1,0 +1,268 @@
+openapi: 3.0.3
+info:
+  title: 地址智能解析 API
+  description: 提供自然语言地址解析、私有地址库管理与高德地图搜索支持的接口服务
+  version: 0.5
+
+servers:
+  - url: http://localhost:5000
+    description: 本地开发服务
+
+paths:
+  /api/resolve:
+    get:
+      summary: 智能地址解析
+      description: 将自然语言地址解析为结构化结果，并返回最匹配的 POI 信息
+      parameters:
+        - in: query
+          name: addr
+          required: true
+          schema:
+            type: string
+          description: 原始地址字符串
+      responses:
+        '200':
+          description: 匹配结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolveResult'
+              example:
+                id: "B0FFJQXXXX"
+                name: "云海村南3号"
+                address: "浙江省宁波市慈溪市长河镇云海村陆家路南3号"
+                location: "121.594637,29.725989"
+                regeo:
+                  country: "中国"
+                  province: "浙江省"
+                  city: "宁波市"
+                  district: "慈溪市"
+                  township: "长河镇"
+                similarity: 85.6
+                auxiliary: 0.0
+                score: 59.9
+                duration: 2.34
+        '400':
+          description: 缺少参数 addr
+
+  /api/custom_address:
+    post:
+      summary: 插入或更新地址
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomAddress'
+      responses:
+        '200':
+          description: 插入或更新成功
+        '400':
+          description: 缺少字段 id
+
+  /api/custom_address/{id}:
+    put:
+      summary: 更新地址字段
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: 更新成功
+
+    delete:
+      summary: 删除地址
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 删除成功
+
+  /api/custom_address/search:
+    get:
+      summary: 搜索地址
+      description: 支持 FTS 模糊搜索（带 query 参数）或按更新时间范围过滤（start+end）
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: 模糊查询关键词
+        - in: query
+          name: start
+          schema:
+            type: integer
+          description: 起始时间戳（秒）
+        - in: query
+          name: end
+          schema:
+            type: integer
+          description: 结束时间戳（秒）
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: page_size
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: 查询结果列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CustomAddress'
+
+  /api/custom_address/nearby:
+    get:
+      summary: 查找周边地址
+      parameters:
+        - in: query
+          name: location
+          required: true
+          schema:
+            type: string
+          description: 经纬度，格式为 "lng,lat"
+        - in: query
+          name: radius
+          schema:
+            type: number
+            default: 200
+          description: 查询半径（米）
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: page_size
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: 匹配结果
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CustomAddress'
+
+components:
+  schemas:
+    CustomAddress:
+      type: object
+      required: [id, name, address, lat, lng]
+      properties:
+        id:
+          type: string
+          example: id-123456
+        name:
+          type: string
+          example: 六道口西北角
+        address:
+          type: string
+          example: 北京市海淀区成府路15号
+        province:
+          type: string
+          example: 北京市
+        district:
+          type: string
+          example: 海淀区
+        township:
+          type: string
+          example: 学院路街道
+        tag:
+          type: string
+          example: 园区
+        comment:
+          type: string
+          example: 地铁出口旁
+        lng:
+          type: number
+          example: 116.365
+        lat:
+          type: number
+          example: 39.998
+        updated_at:
+          type: integer
+          example: 1719211800
+
+    ResolveResult:
+      type: object
+      properties:
+        id:
+          type: string
+          description: POI 的唯一标识
+          example: B0FFJQXXXX
+        name:
+          type: string
+          description: 匹配到的 POI 名称
+          example: 云海村南3号
+        address:
+          type: string
+          description: 完整地址文本
+          example: 浙江省宁波市慈溪市长河镇云海村陆家路南3号
+        location:
+          type: string
+          description: 经纬度坐标，格式为 "lng,lat"
+          example: 121.594637,29.725989
+        regeo:
+          type: object
+          description: 逆地理编码结果（行政区划）
+          properties:
+            country:
+              type: string
+              example: 中国
+            province:
+              type: string
+              example: 浙江省
+            city:
+              type: string
+              example: 宁波市
+            district:
+              type: string
+              example: 慈溪市
+            township:
+              type: string
+              example: 长河镇
+        similarity:
+          type: number
+          format: float
+          description: 文本相似度得分（0~100）
+          example: 85.6
+        auxiliary:
+          type: number
+          format: float
+          description: 空间辅助信息匹配得分（0~100）
+          example: 0.0
+        score:
+          type: number
+          format: float
+          description: 最终融合得分（0~100）
+          example: 59.9
+        duration:
+          type: number
+          format: float
+          description: 解析耗时（秒）
+          example: 2.34

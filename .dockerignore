@@ -1,0 +1,26 @@
+# 忽略日志文件
+logs/
+*.log
+
+# 忽略本地配置文件
+config.ini
+
+# 忽略 Python 缓存
+__pycache__/
+*.pyc
+
+# 忽略本地虚拟环境
+.venv/
+env/
+
+.env
+
+test_*
+
+.git
+
+.idea
+
+readme.md
+
+logs/

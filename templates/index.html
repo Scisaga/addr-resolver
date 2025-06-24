@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>地址智能解析</title>
+    <script src="https://webapi.amap.com/maps?v=2.0&key={{ amap_key }}"></script>
+    <style>
+        body { font-family: sans-serif; padding: 2em; max-width: 800px; margin: auto; }
+        #map { width: 100%; height: 400px; }
+        textarea { width: 100%; height: 216px; font-family: monospace; }
+        input[type=text] { width: 80%; padding: 0.6em; }
+        button { padding: 0.5em 1em; }
+        h2 { margin: 0; padding: 0.5em 0 }
+        h3 { margin: 0; padding: 0.5em 0 }
+    </style>
+</head>
+<body>
+    <h2>🛸 地址智能解析
+        <a href="/docs" style="display:block; float:right; font-size:0.8em; font-weight: normal; margin-left:1em">API文档</a>
+        <a href="/address" style="display:block; float:right; font-size:0.8em; font-weight: normal">私有地址库管理</a>
+    </h2>
+    <form method="post" action="/">
+        <input type="text" name="address" value="{{ addr }}" placeholder="请输入地址">
+        <button type="submit">解析</button>
+    </form>
+    <div></div>
+
+    <h3>API 调用示例</h3>
+    <code style="border: 1px solid #ccc; background: #f4f4f4; padding: 0.2em 0.4em">GET /api/resolve?addr={{ addr }}</code>
+
+    {% if result %}
+    <a href="/api/resolve?addr={{ addr }}" target="_blank">点击查看 JSON</a>
+        <h3>解析结果 <small style="font-weight: normal; color: #008800">（耗时：{{ result.duration }} 秒）</small></h3>
+        <textarea readonly>{{ structured_json }}</textarea>
+
+        {% if result.location %}
+            <h3>地图定位</h3>
+            <div id="map"></div>
+            <script>
+                const poiLocation = "{{ result.location }}";  // 如 "116.438074,40.024988"
+                const name = "{{ result.name }}";
+                const lnglat = poiLocation.split(',').map(parseFloat);
+
+                const map = new AMap.Map('map', {
+                    zoom: 16,
+                    center: lnglat
+                });
+
+                const marker = new AMap.Marker({
+                    position: lnglat,
+                    title: name,
+                    map: map,
+                    cursor: 'pointer'
+                });
+
+                marker.on('click', function () {
+                    const url = `https://www.amap.com/search?query=${encodeURIComponent(name)}&zoom=16&center=${poiLocation}`;
+                    window.open(url, "_blank");
+                });
+
+                const infoWindow = new AMap.InfoWindow({
+                    content: `<strong>${name}</strong><br>点击标记跳转高德地图`,
+                    offset: new AMap.Pixel(0, -30)
+                });
+                infoWindow.open(map, marker.getPosition());
+            </script>
+        {% endif %}
+    {% elif submitted %}
+        <h3 style="color: red;">无匹配地址</h3>
+    {% endif %}
+
+</body>
+</html>

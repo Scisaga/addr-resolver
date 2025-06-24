@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>私有地址库管理</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://webapi.amap.com/maps?v=2.0&key={{ amap_key }}"></script>
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      background: #fff;
+      margin: 0;
+      padding: 1em;
+    }
+    h2 { margin-bottom: 1em; }
+
+    .form-map-wrapper {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6em;
+      background: #f4f4f4;
+      padding: 0.6em;
+      border-radius: 8px;
+      margin-bottom: 1em;
+    }
+    .form-panel {
+      flex: 1 1 120px;
+    }
+    .map-panel {
+      flex: 1 1 160px;
+      min-width: 150px;
+      display: flex;
+    }
+    .map-panel #map {
+      flex: 1;
+      height: 332px;
+      border-radius: 6px;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.6em 0.6em;
+    }
+    .form-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5em;
+    }
+    .form-row label {
+      min-width: 50px;
+      text-align: right;
+      font-size: 0.9em;
+    }
+    .form-row input {
+      flex: 1;
+    }
+    @media (max-width: 768px) {
+      .form-map-wrapper { flex-direction: column; }
+      .form-grid { grid-template-columns: 1fr; }
+      .form-row { flex-direction: column; align-items: stretch; }
+      .form-row label { text-align: left; min-width: auto; margin-bottom: 0.3em; }
+    }
+    input, textarea {
+      padding: 0.45em;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      font-size: 0.95em;
+    }
+    input[readonly] {
+      background: #eee;
+      cursor: not-allowed;
+    }
+    button {
+      padding: 0.2em 0.6em;
+      border: none;
+      border-radius: 4px;
+      background: #1976d2;
+      color: white;
+      cursor: pointer;
+      font-size: 1em;
+    }
+    button.main {
+      padding: 0.6em 1.2em;
+    }
+    table {
+      width: 100%;
+      background: #fff;
+      border-collapse: collapse;
+      border-radius: 8px;
+    }
+    table th, table td {
+      padding: 0.25em 0.75em;
+      text-align: left;
+      border-bottom: 1px solid #eee;
+    }
+    table th {
+      background: #f4f4f4;
+    }
+
+    tbody tr:hover {
+      background-color: #eef4ff;
+      cursor: pointer;
+    }
+    tbody tr.selected {
+      background-color: #cce0ff !important;
+    }
+    .actions button {
+      margin-right: 0.5em;
+      background: #555;
+      color: white;
+    }
+    .actions button:last-child {
+      background: #d32f2f;
+    }
+  </style>
+</head>
+<body>
+  <h2>私有地址库管理
+    <a href="/docs" style="display:block; float:right; font-size:0.8em; font-weight: normal; margin-left:1em">API文档</a>
+    <a href="/" style="display:block; float:right; font-size:0.8em; font-weight: normal">🛸 地址智能解析</a></h2>
+
+  <div class="form-map-wrapper">
+    <div class="form-panel">
+      <form id="address-form">
+        <input type="hidden" id="addr-id">
+        <div class="form-row" style="margin-bottom: 0.6em">
+          <label for="addr-name">名称 *</label>
+          <input type="text" id="addr-name" required style="font-size: 1.2em; color: #00f">
+        </div>
+        <div class="form-row" style="margin-bottom: 0.6em">
+          <label for="addr-address">地址 *</label>
+          <textarea id="addr-address" rows="2" required style="flex:1; font-size: 1.6em; color: #00f"></textarea>
+        </div>
+        <div class="form-grid">
+          <div class="form-row"><label for="addr-tag">标签</label><input type="text" id="addr-tag"></div>
+          <div class="form-row"><label for="addr-province">省份</label><input type="text" id="addr-province"></div>
+          <div class="form-row"><label for="addr-district">区县</label><input type="text" id="addr-district"></div>
+          <div class="form-row"><label for="addr-township">街道</label><input type="text" id="addr-township"></div>
+          <div class="form-row"><label for="addr-lng">经度 *</label><input type="text" id="addr-lng" readonly></div>
+          <div class="form-row"><label for="addr-lat">纬度 *</label><input type="text" id="addr-lat" readonly></div>
+          <div class="form-row"><label for="addr-comment">备注</label><input type="text" id="addr-comment"></div>
+        </div>
+        <button type="submit" class="main" style="float: right">保存地址</button>
+      </form>
+    </div>
+    <div class="map-panel">
+      <div id="map"></div>
+    </div>
+  </div>
+
+  <div style="margin-top: 2em;">
+    <h3>地址列表</h3>
+    <!-- 🔍 筛选控件 -->
+    <div style="margin: 1em 0; display: flex; flex-wrap: wrap; gap: 0.5em; align-items: center;">
+      <input type="text" id="filter-keyword" placeholder="关键词" style="padding: 0.4em; flex: 1;" />
+      <input type="date" id="filter-start" value="{{ today_minus_7 }}" style="padding: 0.4em;" />
+      <input type="date" id="filter-end" value="{{ today }}" style="padding: 0.4em;" />
+      <button onclick="loadTable(1)" style="background: #007bff;">查询</button>
+    </div>
+    <table>
+      <thead><tr><th>名称</th><th>地址</th><th>经纬度</th><th>更新时间</th><th>操作</th></tr></thead>
+      <tbody id="addr-table-body"></tbody>
+    </table>
+    <!-- 📄 分页控件 -->
+    <div style="margin-top: 1em; text-align: center;">
+      <button onclick="changePage(-1)">上一页</button>
+      <span id="page-info">第 1 页</span>
+      <button onclick="changePage(1)">下一页</button>
+    </div>
+  </div>
+
+  <script>
+    const map = new AMap.Map("map", {
+      zoom: 11,
+      center: [116.397428, 39.90923]
+    });
+    let marker = new AMap.Marker({ map });
+
+    map.on("click", function (e) {
+      document.getElementById("addr-lng").value = e.lnglat.getLng();
+      document.getElementById("addr-lat").value = e.lnglat.getLat();
+      marker.setPosition(e.lnglat);
+    });
+
+    document.getElementById("address-form").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      const requiredFields = ["addr-name", "addr-address", "addr-lng", "addr-lat"];
+      for (let id of requiredFields) {
+        const val = document.getElementById(id).value.trim();
+        if (!val) {
+          alert("❌ 必填字段未填写: " + id.replace("addr-", ""));
+          return;
+        }
+      }
+
+      const data = {
+        id: document.getElementById("addr-id").value || "id-" + Date.now(),
+        name: document.getElementById("addr-name").value,
+        address: document.getElementById("addr-address").value,
+        province: document.getElementById("addr-province").value,
+        district: document.getElementById("addr-district").value,
+        township: document.getElementById("addr-township").value,
+        tag: document.getElementById("addr-tag").value,
+        comment: document.getElementById("addr-comment").value,
+        lng: parseFloat(document.getElementById("addr-lng").value),
+        lat: parseFloat(document.getElementById("addr-lat").value)
+      };
+
+      await fetch("/api/custom_address", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+      });
+      loadTable();
+      this.reset();
+      marker.setMap(null);
+      document.querySelectorAll("tbody tr").forEach(r => r.classList.remove("selected"));
+    });
+
+    let currentPage = 1;
+
+    async function loadTable(page = 1) {
+      const q = document.getElementById("filter-keyword").value.trim();
+      const start = document.getElementById("filter-start").value;
+      const end = document.getElementById("filter-end").value;
+      const tbody = document.getElementById("addr-table-body");
+
+      const params = new URLSearchParams({
+        page: page,
+        page_size: 10
+      });
+
+      if (q) {
+        params.set("q", q);
+      } else {
+        params.set("start", Math.floor(new Date(start).getTime() / 1000));
+        params.set("end", Math.floor(new Date(end).getTime() / 1000));
+      }
+
+      try {
+        const res = await fetch(`/api/custom_address/search?${params.toString()}`);
+        const rows = await res.json();
+        tbody.innerHTML = "";
+
+        for (const row of rows) {
+          const tr = document.createElement("tr");
+
+          const formattedTime = new Date(row.updated_at * 1000).toLocaleString('zh-CN', {
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+          });
+
+          tr.innerHTML = `
+            <td>${row.name}</td>
+            <td>${row.address}</td>
+            <td>${row.lng}, ${row.lat}</td>
+            <td>${formattedTime}</td>
+            <td class="actions"><button onclick='deleteRow("${row.id}")'>删除</button></td>
+          `;
+          tr.addEventListener("click", () => {
+            document.querySelectorAll("tbody tr").forEach(r => r.classList.remove("selected"));
+            tr.classList.add("selected");
+            editRow(row);
+          });
+          tbody.appendChild(tr);
+        }
+
+        currentPage = page;
+        document.getElementById("page-info").innerText = `第 ${page} 页`;
+      } catch (err) {
+        console.error("❌ 查询失败：", err);
+      }
+    }
+
+    function changePage(offset) {
+      const newPage = currentPage + offset;
+      if (newPage < 1) return;
+      loadTable(newPage);
+    }
+
+    function editRow(row) {
+      document.getElementById("addr-id").value = row.id;
+      document.getElementById("addr-name").value = row.name;
+      document.getElementById("addr-address").value = row.address;
+      document.getElementById("addr-province").value = row.province;
+      document.getElementById("addr-district").value = row.district;
+      document.getElementById("addr-township").value = row.township;
+      document.getElementById("addr-tag").value = row.tag;
+      document.getElementById("addr-comment").value = row.comment;
+      document.getElementById("addr-lng").value = row.lng;
+      document.getElementById("addr-lat").value = row.lat;
+      marker.setPosition([row.lng, row.lat]);
+      marker.setMap(map);
+      map.setCenter([row.lng, row.lat]);
+    }
+
+    async function deleteRow(id) {
+      await fetch(`/api/custom_address/${id}`, { method: "DELETE" });
+      loadTable();
+    }
+
+    loadTable();
+  </script>
+</body>
+</html>
