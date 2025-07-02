@@ -1,6 +1,7 @@
 import sqlite3
 import time
 import math
+import re
 from typing import List, Dict
 
 # ✅ SQLite 数据库文件路径（默认）
@@ -95,6 +96,7 @@ def search_address(
     """
     offset = (page - 1) * page_size
     query = query.strip()
+    query = re.sub(r"[^\u4e00-\u9fa5\w\s]", " ", query)
 
     with connect() as conn:
         cursor = conn.cursor()
