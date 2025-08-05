@@ -481,8 +481,8 @@ def resolve_address(raw_address: str) -> Dict:
 
     # 如果结果少于 3 个，再用 AP 单独搜索一次
     if len(pois) < 3:
-        logger.info(f"结果较少，使用 AP 单独再搜索：{fields.get('AP', '')}")
-        extra_pois = amap_text_search(city, fields.get('AP', ''), t)
+        logger.info(f"结果较少，再搜索：{fields.get('D', '')}")
+        extra_pois = amap_text_search('', fields.get('D', ''), t)
 
         # 合并两个搜索结果，去重（可根据 poi 名称或 id）
         all_pois = {}

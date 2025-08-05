@@ -1,4 +1,6 @@
-# 地址智能解析服务 (AddrResolver)
+# 地址解析引擎 (AddrResolver)
+
+![地址解析引擎业务逻辑架构](img/addr.svg)
 
 结合高德地图API和通义千问大语言模型，能够将自然语言地址智能解析为结构化数据，并提供地图定位功能。
 
@@ -7,8 +9,9 @@
 - **智能地址解析**: 将自然语言地址解析为结构化字段（城市、区县、兴趣点、门牌号等）
 - **多源数据融合**: 结合高德地图API和通义千问模型，提供高精度的地址匹配
 - **Web界面**: 提供友好的Web界面进行地址解析和结果展示
-- **RESTful API**: 支持API调用，便于集成到其他系统
+- **RESTful API**: 支持API调用，便于集成到
 - **地图定位**: 集成高德地图，可视化显示解析结果
+- **私有化地址库**：支持私有化地址库功能，支持地图点选地址录入，支持多标签管理，召回时优选选取
 - **Docker部署**: 支持Docker容器化部署
 
 ## 🏗️ 系统架构
@@ -29,6 +32,88 @@ AddrResolver/
 ```
 
 ## 🔍 核心处理逻辑
+
+```mermaid
+flowchart TD
+    %% ----------- 阶段1：本地地址库召回 -----------
+    subgraph Phase1[阶段1：本地地址库召回]
+        direction LR
+        A[📥 输入自然语言地址]:::input --> LDB[📚 本地地址库召回]:::proc
+        LDB -- 命中 --> OUT1[📤 返回结构化结果]:::output
+    end
+    
+    Phase1 -- 未命中 --> Phase2
+
+    %% ----------- 阶段2：通义千问结构化解析 -----------
+    subgraph Phase2[阶段2：通义千问结构化解析]
+        B[🔍 通义千问解析]:::llm -->|结构化6字段| B1[C: 城市]:::field
+        B --> B2[D: 区县+镇]:::field
+        B --> B3[AP: 兴趣点/楼名]:::field
+        B --> B4[U: 内部位置]:::field
+        B --> B5[I: 辅助信息]:::field
+        B --> B6[T: 地址类型]:::field
+    end
+
+    Phase2 -.-> Phase3
+
+    %% ----------- 阶段3：高德API精确搜索 -----------
+    subgraph Phase3[阶段3：高德API精确搜索]
+        direction LR
+        D1[D+AP 组合搜索]:::proc
+        D1 --> G1[高德输入提示API<br>/v3/assistant/inputtips]:::api
+        G1 --> C1{结果≥3个?}:::cond
+        C1 -- 是 --> RES[📤 返回候选POI]:::output
+        C1 -- 否 --> D2[仅AP字段搜索]:::proc
+        D2 --> G1
+    end
+
+    Phase3 -- 没有候选结果 --> Phase4
+    
+    Phase3 -.-> Phase5
+
+    %% ----------- 阶段4：周边搜索 Fallback -----------
+    subgraph Phase4[阶段4：周边搜索 Fallback]
+        direction LR
+        P1[锚点定位]:::proc
+        P1 --> G2[高德地理编码API<br>/v3/geocode/geo]:::api
+        P2[关键词提取 U+AP+I]:::proc
+        G2 --> G3[高德周边搜索API<br>/v3/place/around]:::api
+        P2 --> G3
+        G3 -- 存在I字段 --> L1[通义千问匹配候选POI]:::llm
+        G3 -- 无I字段 --> R2[候选POI结果]:::output
+        L1 --> R2
+    end
+    
+    Phase4 -.-> Phase5
+
+    %% ----------- 阶段5：智能匹配算法 -----------
+    subgraph Phase5[阶段5：智能匹配算法]
+        SIM[重点语义单元相似度]:::algo --> CALC[最终得分]:::calc
+        LOC[空间辅助得分]:::algo --> CALC
+    end
+
+    Phase5 -.-> Phase6
+
+    %% ----------- 阶段6：结果优化 -----------
+    subgraph Phase6[阶段6：结果优化]
+        direction LR
+        DEDUP[POI ID去重]:::proc --> REGEOCODE[高德逆地理编码API<br>/v3/geocode/regeo]:::api
+        REGEOCODE --> PERF[性能监控&耗时记录]:::proc
+        PERF --> OUT2[📤 输出最终结构化结果]:::output
+    end
+
+    %% ----------- 样式定义 -----------
+    classDef input fill:#e3f2fd,stroke:#2196f3,stroke-width:2px,color:#222;
+    classDef llm fill:#e8f5e9,stroke:#388e3c,stroke-width:2px,color:#222;
+    classDef field fill:#fffde7,stroke:#fbc02d,stroke-width:1.5px,color:#555;
+    classDef proc fill:#f1f8e9,stroke:#689f38,stroke-width:1.5px,color:#222;
+    classDef api fill:#fff3e0,stroke:#ff9800,stroke-width:1.5px,color:#222;
+    classDef cond fill:#ffe0b2,stroke:#fb8c00,stroke-width:1.5px,color:#a67404;
+    classDef output fill:#ede7f6,stroke:#7e57c2,stroke-width:2px,color:#2d1457;
+    classDef algo fill:#fce4ec,stroke:#e91e63,stroke-width:1.5px,color:#c2185b;
+    classDef calc fill:#ede7f6,stroke:#8e24aa,stroke-width:2px,color:#222;
+
+```
 
 ### 1. 地址结构化处理
 系统首先使用通义千问大语言模型将自然语言地址解析为6个结构化字段：
@@ -265,6 +350,9 @@ python test_address_resolver_real.py
 ## 🔗 相关链接
 
 - [高德地图开放平台](https://lbs.amap.com/)
+  - [Web服务 搜索POI](https://lbs.amap.com/api/webservice/guide/api-advanced/search)
+  - [Web服务 输入提示](https://lbs.amap.com/api/webservice/guide/api-advanced/inputtips)
+  - [快速接入高德地图 MCP Server](https://lbs.amap.com/api/mcp-server/gettingstarted)
 - [阿里云百炼](https://bailian.console.aliyun.com/)
 - [Flask框架](https://flask.palletsprojects.com/)
 - [通义千问](https://qianwen.aliyun.com/)
