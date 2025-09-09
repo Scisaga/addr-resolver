@@ -2,6 +2,8 @@
 .idea/
 config.ini
 .env
+tcl/
 logs/
 __pycache__/
 test_address_resolver_real.py
+tts.py

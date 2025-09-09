@@ -3,9 +3,14 @@ import time
 import math
 import re
 from typing import List, Dict
+import os
 
 # ✅ SQLite 数据库文件路径（默认）
-DB_PATH = "address.db"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
+DB_PATH = os.path.join(PROJECT_ROOT, "address.db")
+
+print(f"使用数据库路径：{DB_PATH}")
 
 # ✅ 建立数据库连接
 def connect():

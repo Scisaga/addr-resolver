@@ -1,6 +1,6 @@
 import unittest
 import time
-from address_db import (
+from util.address_db import (
     connect, insert_address, update_address, delete_address,
     search_address, find_nearby_addresses
 )

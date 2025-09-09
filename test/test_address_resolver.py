@@ -1,5 +1,5 @@
 import unittest
-from address_resolver import resolve_address, amap_geocode, amap_around_search, core_keyword_overlap_ratio, amap_poi_search, regeo
+from resolver import resolve_address, amap_geocode, amap_around_search, core_keyword_overlap_ratio, amap_poi_search, regeo
 
 class TestAddressResolver(unittest.TestCase):
 

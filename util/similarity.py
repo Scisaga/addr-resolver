@@ -105,6 +105,7 @@ def core_keyword_overlap_ratio(a: str, b: str) -> float:
     backward = match_sequence_score(seq_a[::-1], seq_b[::-1])
     return max(forward, backward)
 
+
 if __name__ == "__main__":
     # 示例
     addr1 = "海曙区集士港镇三江购物"

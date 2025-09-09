@@ -6,6 +6,7 @@ services:
       - "5000:5000" # 映射到本地端口
     environment:
       - AMAP_KEY=${AMAP_KEY} # 高德Key
+      - AMAP_WEB_KEY=${AMAP_WEB_KEY} # 高德WebKey
       - LLM_API_KEY=${LLM_API_KEY} # 阿里云百炼Key
       - QWEN_MODEL=${QWEN_MODEL} # 默认是 qwen3-32b 也可以试试别的
     volumes:

@@ -1,7 +1,9 @@
 import sqlite3
 import os
 
-DB_PATH = "address.db"  # 默认数据库文件名
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
+DB_PATH = os.path.join(PROJECT_ROOT, "address.db")
 
 def build_database(db_path=DB_PATH):
     # ✅ 如果数据库已存在，则先删除旧文件，确保干净初始化

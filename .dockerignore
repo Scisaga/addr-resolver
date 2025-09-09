@@ -24,3 +24,7 @@ test_*
 readme.md
 
 logs/
+
+tcl/
+
+tty.py

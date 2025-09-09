@@ -4,8 +4,8 @@ import os
 from datetime import date, timedelta
 from flask import Flask, request, render_template, jsonify, send_from_directory
 
-from address_resolver import resolve_address  # 地址智能解析主流程
-from address_db import (
+from resolver import resolve_address  # 地址智能解析主流程
+from util.address_db import (
     insert_address, update_address, delete_address,
     search_address, find_nearby_addresses
 )
@@ -18,9 +18,29 @@ def get_config_value(env_key: str, config_section: str, config_key: str) -> str:
     return os.environ.get(env_key) or config.get(config_section, config_key)
 
 AMAP_KEY = get_config_value("AMAP_KEY", "key", "amap_key")
+AMAP_WEB_KEY = get_config_value("AMAP_WEB_KEY", "key", "amap_web_key")
 
 # ✅ 创建 Flask 实例
 app = Flask(__name__)
+
+def _safe_resolve_address(raw_address, max_retries=10):
+    """
+    调用 resolve_address，遇到 JSONDecodeError 就重试。
+    :param raw_address: 输入原始地址
+    :param max_retries: 最大重试次数
+    :param wait_sec: 每次重试间隔
+    """
+    for i in range(max_retries):
+        try:
+            return resolve_address(raw_address)
+        except json.JSONDecodeError as e:
+            print(f"解析失败，重试 {i+1}/{max_retries}：{e}")
+        except Exception as e:
+            # 其他错误不重试，直接抛出
+            print(f"调用 resolve_address 出错：{e}")
+            raise
+    raise RuntimeError(f"resolve_address 重试 {max_retries} 次后仍然失败: {raw_address}")
+
 
 # ✅ 首页：地址输入与地图展示
 @app.route("/", methods=["GET", "POST"])
@@ -39,7 +59,7 @@ def index():
 
     return render_template("index.html", addr=addr, result=result,
                            structured_json=structured_json, submitted=submitted,
-                           amap_key=AMAP_KEY)
+                           amap_key=AMAP_WEB_KEY)
 
 # ✅ 私有化地址库管理
 @app.route("/address")
@@ -58,7 +78,7 @@ def api_resolve():
     addr = request.args.get("addr", "")
     if not addr:
         return jsonify({"error": "缺少参数 addr"}), 400
-    result = resolve_address(addr)
+    result = _safe_resolve_address(addr)
     return jsonify(result or {})
 
 # ✅ 插入地址（POST JSON）
