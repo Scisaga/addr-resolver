@@ -14,44 +14,74 @@
 - **私有化地址库**：支持私有化地址库功能，支持地图点选地址录入，支持多标签管理，召回时优选选取
 - **Docker部署**: 支持Docker容器化部署
 
-## 🏗️ 系统架构
+## 📁 文件一览
 
 ```
 AddrResolver/
-├── app.py                 # Flask Web应用主文件
-├── address_resolver.py    # 核心地址解析逻辑
-├── similarity.py          # 相似度计算模块
-├── struct_prompt.md       # 大模型提示词模板
+├── app.py                        # Flask Web 入口
+├── resolver.py                   # 地址解析主流程
+├── config.py                     # 环境变量与日志配置
+├── requirements.txt              # Python 依赖
+├── Dockerfile
+├── docker-compose.yml
+├── address.db                    # 示例地址库
+├── .env                          # 环境变量示例
+├── docs/
+│   └── address_resolver.md
+├── func/
+│   ├── amap_call.py              # 高德 API 封装
+│   ├── qwen_call.py              # 通义千问调用
+│   └── struct_llm_call.py        # 结构化 LLM 调用
+├── lora/
+│   ├── bio2sft.py
+│   ├── build_sft_from_adm.py
+│   └── …                         # SFT 训练脚本与数据
+├── prompts/
+│   └── struct_prompt.md          # LLM 提示词
+├── static/
+│   └── swagger/                  # OpenAPI 文档
 ├── templates/
-│   └── index.html         # Web界面模板
-├── config.ini.sample      # 配置文件模板
-├── requirements.txt       # Python依赖包
-├── Dockerfile            # Docker镜像构建文件
-├── docker-compose.yml    # Docker Compose配置
-└── logs/                 # 日志目录
+│   ├── index.html
+│   └── address.html
+├── test/
+│   ├── test_address_db.py
+│   ├── test_address_resolver.py
+│   └── test_address_resolver_real.py
+├── util/
+│   ├── address_db.py
+│   ├── geo.py
+│   └── similarity.py
+└── tcl/
+    ├── address.db
+    └── data_validation_1.ipynb
 ```
 
 ## 🔍 核心处理逻辑
 
 ```mermaid
 flowchart TD
-    %% ----------- 阶段1：本地地址库召回 -----------
-    subgraph Phase1[阶段1：本地地址库召回]
+    %% ----------- 阶段1：优先召回 -----------
+    subgraph Phase1[阶段1：优先召回]
         direction LR
         A[📥 输入自然语言地址]:::input --> LDB[📚 本地地址库召回]:::proc
         LDB -- 命中 --> OUT1[📤 返回结构化结果]:::output
+
+        %% 召回失败 → 高德查询
+        LDB -- 未命中 --> AMAP[🗺️ 调用高德接口查询]:::api
+        AMAP --> TOP1[四级行政区划相同 + POI高度相似]:::proc
+        TOP1 -- 是 --> OUT1[📤 返回结果]:::output
     end
     
     Phase1 -- 未命中 --> Phase2
 
-    %% ----------- 阶段2：通义千问结构化解析 -----------
-    subgraph Phase2[阶段2：通义千问结构化解析]
-        B[🔍 通义千问解析]:::llm -->|结构化6字段| B1[C: 城市]:::field
-        B --> B2[D: 区县+镇]:::field
-        B --> B3[AP: 兴趣点/楼名]:::field
-        B --> B4[U: 内部位置]:::field
-        B --> B5[I: 辅助信息]:::field
-        B --> B6[T: 地址类型]:::field
+    %% ----------- 阶段2：地址大模型结解析 -----------
+    subgraph Phase2[阶段2：地址大模型结构化解析]
+        B[Qwen3 LORA + HF TGI]:::llm -->|结构化字段| B1[行政区划]:::field
+        B --> B2[道路 + 功能区]:::field
+        B --> B3[POI]:::field
+        B --> B4[建筑层级]:::field
+        B --> B5[辅助信息]:::field
+        B --> B6[杂项]:::field
     end
 
     Phase2 -.-> Phase3
@@ -116,16 +146,70 @@ flowchart TD
 ```
 
 ### 1. 地址结构化处理
-系统首先使用通义千问大语言模型将自然语言地址解析为6个结构化字段：
 
-| 字段 | 说明 | 示例 |
-|------|------|------|
-| **C** | 直辖市、地级市（删除省一级信息） | "宁波市" |
-| **D** | 区县 + 街道/镇，不包含道路信息 | "慈溪市长河镇" |
-| **AP** | 兴趣点/小区/社区/道路/研究所 + 楼名/楼宇编号 | "云海村南3号" |
-| **U** | 单元、门牌、楼栋、房号等内部位置信息 | "1单元201室" |
-| **I** | 辅助信息（如"附近"、"对面"、"门口"等） | "北门附近" |
-| **T** | 该地址所属的类型 | "商务住宅" |
+#### 标签体系
+
+本项目使用了[CCKS2021中文地址要素解析数据集](https://tianchi.aliyun.com/dataset/109339)的《中文地址要素解析标注规范》，具体如下：
+
+- 行政区划层级
+  * `prov`：省级行政区（省/自治区/直辖市）。
+   * `city`：地级行政区（地级市/地区/自治州）。
+   * `district`：县级行政区（市辖区/县级市/县）。
+   * `town`：乡级行政区（镇/街道/乡）。
+   * `community`：社区/行政村/自然村。
+   * `village_group`：村内的“组/队/社”（数字编号）。
+- 功能区与道路体系
+   * `devzone`：各类开发区/产业园/度假区等功能区。
+   * `road`：有正式名称的道路（路/街/巷/弄/隧道/高架等；步行街/商业街默认按 road）。
+   * `roadno`：路号（道路门牌号）。
+   * `intersection`：道路路口/出入口（与 `road` 必同时出现）。
+- POI 层级
+   * `poi`：兴趣点（小区/园区/大厦/商铺等）。
+   * `subpoi`：子兴趣点/分区/期/门/苑等。
+- 建筑层级（自上而下）
+   * `houseno`：楼栋/幢/号楼；农村门牌也归此。
+   * `cellno`：单元（含“甲乙丙丁/东西/一单元”等）。
+   * `floorno`：楼层/层。
+   * `roomno`：房号/户号/商铺号等。
+   * `detail`：楼栋/单元/楼层/房间层级不明的整体串（如 `12-3-1001`）。
+- 辅助定位信息
+   * `assist`：普通辅助词（如“附近”等定性描述/提示词）。
+   * `distance`：带数量单位的距离（米/千米/“几十米”等）。
+   * `direction`：方位词（如“东/东北”等，文档在示例中使用）。
+- 杂项
+   * `redundant`：非地址要素/冗余内容（人名、电话、邮编、配送提示、连接词“与”等；标点也归此）。
+   * `others`：规范未覆盖但确属地址元素的内容（如山/岛等；港澳台地址可整体记为 `others`）。
+
+
+#### 模型微调
+
+- **LoRA 训练**  
+  参见 `lora/readme.md`，按照数据准备（`bio2sft.py` / `build_sft_from_adm.py`）→ 合并生成 `train.jsonl` → 运行 `train_hf_qlora.py` 的流程完成指令微调。默认脚本针对 Qwen3-8B，建议使用两张 24GB GPU（或更高配置），训练产物保存在 `outputs/qwen3_8b_addr_qlora/`，核心训练语料来自 [CCKS2021中文地址要素解析数据集](https://tianchi.aliyun.com/dataset/109339)。
+
+- **构建结构化推理容器**  
+  `func/struct_llm_call.py` 对接 HuggingFace TGI 的 `/generate` 接口，可将合并后的模型挂载到官方镜像：
+  ```bash
+  docker run --gpus all --shm-size 1g -p 8080:80 \
+    -v $(pwd)/outputs/qwen3_8b_addr_merged:/data \
+    ghcr.io/huggingface/text-generation-inference:latest \
+    --model-id /data \
+    --dtype bfloat16 \
+    --num-shard 2 \
+    --max-input-tokens 2048 --max-total-tokens 2304
+  ```
+  服务启动后可通过 `curl http://127.0.0.1:8080/health` 或运行 `python lora/infer.py "上海市徐汇区佳安公寓宛平南路0001号楼"` 验证 XML 标签输出是否正常。
+
+- **更新环境变量**  
+  修改根目录 `.env`，保证键名与代码一致：
+  ```env
+  AMAP_KEY=高德Web服务密钥
+  AMAP_WEB_KEY=高德JS SDK密钥
+  LLM_API_KEY=阿里云百炼API密钥
+  QWEN_MODEL=qwen3-8b
+  STRUCT_LLM_URL=http://127.0.0.1:8080
+  STRUCT_LLM_TOKEN=如需鉴权则填写Bearer Token，否则留空
+  ```
+  若旧环境中使用了 `STRUCT_LLM` 等变量名，请同步改为 `STRUCT_LLM_URL`，避免推理阶段读取失败。
 
 ### 2. 高德地图API集成
 
