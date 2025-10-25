@@ -316,6 +316,7 @@ def resolve_address(raw_address: str) -> Dict:
     '''3. 地址结构化'''
     logger.info("3. 地址结构化")
     structured = infer(raw_address)
+
     logger.info(f"大模型返回结构化结果：{structured}")
     fields = build_structured_fields(raw_address, structured)
     city = fields.get("C", "")
@@ -450,6 +451,7 @@ def resolve_address(raw_address: str) -> Dict:
     # 补充逆地理编码乡镇街道信息
     best["regeo"] = regeo(best["location"])
     best["ap"] = ap
+    best["structured"] = structured.get("tags", {})
 
     duration = round(time.time() - start_time, 2)  # ✅ 计算耗时
     logger.info(f"✅ 匹配结果：{best['name']} | {best['address']} | 最终得分: {best['score']} | 文本: {best['similarity']} | 空间: {best['auxiliary']}")
