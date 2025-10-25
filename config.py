@@ -17,7 +17,7 @@ def load_prompt(filename: str) -> str:
     with open(filename, "r", encoding="utf-8") as f:
         return f.read()
 
-STRUCT_PROMPT = load_prompt(os.path.join(BASE_DIR, "struct_prompt.md"))
+STRUCT_PROMPT = load_prompt(os.path.join(BASE_DIR, "prompts/struct_prompt.md"))
 
 ##
 log_dir = os.path.join(BASE_DIR, "logs")

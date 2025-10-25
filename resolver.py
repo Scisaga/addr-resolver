@@ -3,14 +3,13 @@ import requests
 import json
 import logging,time,os,sys
 import re
-from dotenv import load_dotenv
-from openai import OpenAI
-from typing import Dict, List
+from typing import Dict, List, Any
 from util.address_db import search_address
 from util.similarity import score_main_tokens, core_keyword_overlap_ratio
-from config import logger, STRUCT_PROMPT
+from config import logger
 from func.amap_call import amap_inputtips, amap_geocode, amap_around_search, amap_poi_search, regeo
 from func.qwen_call import call_qwen
+from func.struct_llm_call import infer
 
 
 def get_best_poi(pois: List[Dict], keyword: str, threshold: float = 70.0) -> Dict | None:
@@ -97,7 +96,7 @@ def search_nearby_by_fields(city: str, fields: Dict) -> List[Dict]:
     anchor = fields.get("D")
     logger.info(f"{city} 搜索锚点（D）: {anchor}")
 
-    loc = amap_geocode(city, anchor)
+    loc = amap_geocode(city, anchor) # type: ignore
     print(f"锚点位置：{loc}")
     if not loc:
         logger.error("❌ AP锚点定位失败")
@@ -216,6 +215,69 @@ def extract_first_region(text: str) -> str:
         return match.group(1)
     return ""
 
+def build_structured_fields(raw_address: str, structured: Any) -> Dict[str, str]:
+    fields = {"C": "", "D": "", "AP": "", "U": "", "I": "", "T": ""}
+
+    if not isinstance(structured, dict):
+        return fields
+
+    tags = structured.get("tags")
+    if not isinstance(tags, dict):
+        return fields
+
+    alias_to_field = {
+        "prov": "C",
+        "city": "C",
+        "district": "D",
+        "town": "D",
+        "community": "D",
+        "village_group": "D",
+        "devzone": "AP",
+        "road": "AP",
+        "roadno": "AP",
+        "intersection": "AP",
+        "poi": "AP",
+        "subpoi": "AP",
+        "houseno": "AP",
+        "cellno": "U",
+        "floorno": "U",
+        "roomno": "U",
+        "detail": "U",
+        "assist": "I",
+        "distance": "I",
+        "direction": "I",
+    }
+
+    collected: Dict[str, List[str]] = {"C": [], "D": [], "AP": [], "U": [], "I": [], "T": []}
+
+    for key, value in tags.items():
+        if not isinstance(key, str):
+            continue
+        key_stripped = key.strip()
+        key_lower = key_stripped.lower()
+        target = alias_to_field.get(key_lower)
+        if not target and key_stripped in fields:
+            target = key_stripped
+        if not target:
+            continue
+        values = value if isinstance(value, list) else [value]
+        for item in values:
+            if item is None:
+                continue
+            text = str(item).strip()
+            if not text:
+                continue
+            if text not in collected[target]:
+                collected[target].append(text)
+
+    for field in collected:
+        if collected[field]:
+            if field == "C":
+                fields[field] = collected[field][0]
+            else:
+                fields[field] = "".join(collected[field])
+
+    return fields
 
 def resolve_address(raw_address: str) -> Dict:
     """
@@ -226,7 +288,7 @@ def resolve_address(raw_address: str) -> Dict:
     start_time = time.time()  # ✅ 启动计时
     logger.info(f"0. 输入地址：{raw_address}")
 
-    # 先查私有地址库
+    '''1. 先查私有地址库'''
     logger.info("1. 私有地址库匹配")
     private_matches = search_address(query=raw_address, page=1, page_size=3)
     if private_matches:
@@ -240,31 +302,33 @@ def resolve_address(raw_address: str) -> Dict:
         logger.info(f"✅ 命中私有地址库：{best['name']} | {best['address']}")
         return best
 
-    # 快速 POI 搜索匹配（使用高德 POI 搜索 + 相似度）
+    '''2. 快速 POI 搜索匹配（使用高德 POI 搜索 + 相似度）'''
     logger.info("2. 快速搜索匹配（amap_poi_search）")
     pois = amap_poi_search("", raw_address)
-    best_fast = get_best_poi(pois, raw_address)
+    best_fast = get_best_poi(pois, raw_address) # type: ignore 
 
+    # 存在分数超过70的结果
     if best_fast:
-        best_fast["regeo"] = regeo(best_fast["location"])
+        best_fast["regeo"] = regeo(best_fast["location"]) # 乡镇一级信息匹配
         best_fast["duration"] = round(time.time() - start_time, 2)
         return best_fast
 
-    # 地址结构化
+    '''3. 地址结构化'''
     logger.info("3. 地址结构化")
-    struct_prompt = STRUCT_PROMPT + raw_address
-    structured = call_qwen(struct_prompt)
-    structured_compact = json.dumps(json.loads(structured), ensure_ascii=False)
-    logger.info(f"大模型返回结构化结果：{structured_compact}")
+    structured = infer(raw_address)
+    logger.info(f"大模型返回结构化结果：{structured}")
+    fields = build_structured_fields(raw_address, structured)
+    city = fields.get("C", "")
+    d = fields.get("D", "")
+    ap = fields.get("AP", "")
+    t = fields.get("T", "")
+    i = fields.get("I", "")
+    normalize_address = "".join(part for part in [d, ap, i] if part) or raw_address
+    logger.info(
+        f"结构化字段：C={city} | D={d} | AP={ap} | U={fields.get('U', '')} | I={i} | T={t}"
+    )
 
-    fields = json.loads(structured)
-    city = fields.get('C', '')
-    d = fields.get('D', '')
-    ap = fields.get('AP', '')
-    t = fields.get('T', '')
-    i = fields.get('I', '')
-    normalize_address = d + ap + i
-
+    '''4. POI推荐'''
     logger.info("4. POI推荐")
     search_keyword = f"{d}{ap}"
     logger.info(f"搜索关键词：{city} {search_keyword} {t}")

@@ -25,7 +25,7 @@ COPY requirements.txt .
 # 安装 Python 依赖
 RUN pip install --upgrade pip
 
-RUN pip install numpy && pip install pkuseg && pip install -r requirements.txt
+RUN pip install numpy && pip install -r requirements.txt
 
 # 拷贝项目文件
 COPY . .

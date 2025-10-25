@@ -7,3 +7,5 @@ logs/
 __pycache__/
 test_address_resolver_real.py
 tts.py
+lora/*.xlsx
+lora/sft*.jsonl
