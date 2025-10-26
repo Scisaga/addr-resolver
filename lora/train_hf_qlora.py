@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 tianchi-new/train_hf_qlora.py \
-  --data tianchi-new/sft.jsonl --bf16
+CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 lora/train_hf_qlora.py \
+  --data lora/sft.jsonl --bf16
 """
 import argparse, os, torch
 from datasets import load_dataset

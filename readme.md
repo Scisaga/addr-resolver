@@ -1,5 +1,7 @@
 # 地址解析引擎 (AddrResolver)
 
+[![HF Model Card](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-Model%20Card-blue)](https://huggingface.co/scisaga/qwen3-8b-instruct-lora-address-struct-cn) [![License: CC BY 4.0](https://img.shields.io/badge/License-CC%20BY%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by/4.0/)
+
 ![地址解析引擎业务逻辑架构](img/addr.svg)
 
 结合高德地图API和通义千问大语言模型，能够将自然语言地址智能解析为结构化数据，并提供地图定位功能。
@@ -185,6 +187,10 @@ flowchart TD
 
 - **LoRA 训练**  
   参见 `lora/readme.md`，按照数据准备（`bio2sft.py` / `build_sft_from_adm.py`）→ 合并生成 `train.jsonl` → 运行 `train_hf_qlora.py` 的流程完成指令微调。默认脚本针对 Qwen3-8B，建议使用两张 24GB GPU（或更高配置），训练产物保存在 `outputs/qwen3_8b_addr_qlora/`，核心训练语料来自 [CCKS2021中文地址要素解析数据集](https://tianchi.aliyun.com/dataset/109339)。
+
+- **模型下载**
+  [scisaga/qwen3-8b-instruct-lora-address-struct-cn](https://huggingface.co/scisaga/qwen3-8b-instruct-lora-address-struct-cn) 
+  [![HF Model Card](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-Model%20Card-blue)](https://huggingface.co/scisaga/qwen3-8b-instruct-lora-address-struct-cn>)
 
 - **构建结构化推理容器**  
   `func/struct_llm_call.py` 对接 HuggingFace TGI 的 `/generate` 接口，可将合并后的模型挂载到官方镜像：
